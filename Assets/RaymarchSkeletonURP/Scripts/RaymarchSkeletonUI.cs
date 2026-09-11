@@ -79,6 +79,10 @@ namespace Premiere.RaymarchSkeleton
 
             feature.skelObjectSmoothing = LabeledSlider("Skeleton/Object Smoothing", feature.skelObjectSmoothing, 0f, 1f);
 
+            GUILayout.Label("Skeleton A/B Combine");
+            feature.skeletonCombineOp = SkeletonCombineOpToolbar(feature.skeletonCombineOp);
+            feature.skeletonCombineSmoothing = LabeledSlider("Skeleton A/B Smoothing", feature.skeletonCombineSmoothing, 0f, 1f);
+
             GUILayout.Label("Background Color");
             feature.backgroundColor = ColorSliders(feature.backgroundColor);
 
@@ -140,6 +144,9 @@ namespace Premiere.RaymarchSkeleton
 
             GUILayout.Space(6);
             inst.useJointRotations = GUILayout.Toggle(inst.useJointRotations, "Use bone rotations for joint orientation");
+
+            GUILayout.Space(6);
+            inst.invert = GUILayout.Toggle(inst.invert, "Invert (negate) - turn into cavity/void");
         }
 
         // --- small IMGUI helpers ---
@@ -149,6 +156,13 @@ namespace Premiere.RaymarchSkeleton
             string[] names = { "Sphere", "Box", "Capsule", "Cylinder" };
             int idx = GUILayout.Toolbar((int)current, names);
             return (RaymarchPrimitive)idx;
+        }
+
+        private static SkeletonCombineOp SkeletonCombineOpToolbar(SkeletonCombineOp current)
+        {
+            string[] names = { "Union (+)", "Subtract (-)", "Intersect (∩)", "XOR (%)" };
+            int idx = GUILayout.Toolbar((int)current, names);
+            return (SkeletonCombineOp)idx;
         }
 
         private static float LabeledSlider(string label, float value, float min, float max)

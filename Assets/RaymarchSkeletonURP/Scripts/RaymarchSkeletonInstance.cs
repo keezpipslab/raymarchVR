@@ -77,6 +77,10 @@ namespace Premiere.RaymarchSkeleton
         [Header("Blend between joints and edges of this skeleton")]
         public float jointEdgeSmoothing = 0.08f;
 
+        [Header("Skeleton A/B combine")]
+        [Tooltip("Flip this skeleton's surface inside-out (negate its signed distance) before it's combined with the other skeleton. Turns solid geometry into a cavity/void - most useful paired with Subtract or Intersect on the renderer feature. Applied once to this whole skeleton's already-combined joints+edges, not per-primitive.")]
+        public bool invert = false;
+
         // Cached per-frame data, read by RaymarchSkeletonRendererFeature.
         [NonSerialized] public Matrix4x4[] jointInverseTransforms;
         [NonSerialized] public float[] jointPrimitives;

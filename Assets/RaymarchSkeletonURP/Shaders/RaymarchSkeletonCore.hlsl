@@ -66,6 +66,15 @@ float4x4 _RM_SceneTransform;
 float _RM_JointEdgeSmoothing[SKELETON_COUNT];
 float _RM_SkelObjectSmoothing;
 
+// boolean operator combining Skeleton A (index 0) and Skeleton B (index 1):
+// 0=Union, 1=Subtract (A-B), 2=Intersect, 3=SymmetricDifference. Must match
+// SkeletonCombineOp.cs's int values.
+int _RM_SkeletonCombineOp;
+float _RM_SkeletonCombineSmoothing;
+// per-skeleton: non-zero flips that skeleton's signed distance (cavity/void)
+// before it's combined with the other skeleton.
+float _RM_SkeletonInvert[SKELETON_COUNT];
+
 // per-skeleton joint look
 float3 _RM_JointColor[SKELETON_COUNT];
 float _RM_JointAmbientScale[SKELETON_COUNT];
@@ -191,6 +200,68 @@ Surface UnionSurface(Surface s1, Surface s2, float smoothness)
     o.occlusionColor = lerp(s1.occlusionColor, s2.occlusionColor, t);
     o.signedDistance = signedDistance;
     return o;
+}
+
+// Smooth max, the dual of PolySminSurface: smax(a,b,k) = -smin(-a,-b,k). The
+// returned blend factor keeps the same "0 = pure a, 1 = pure b" meaning as
+// PolySminSurface's, since that factor only depends on |a-b|.
+float2 PolySmaxSurface(float a, float b, float k)
+{
+    float2 sd = PolySminSurface(-a, -b, k);
+    return float2(-sd.x, sd.y);
+}
+
+Surface IntersectSurface(Surface s1, Surface s2, float smoothness)
+{
+    float2 sd = PolySmaxSurface(s1.signedDistance, s2.signedDistance, smoothness);
+    float signedDistance = sd.x;
+    float t = sd.y;
+
+    Surface o;
+    o.color = lerp(s1.color, s2.color, t);
+    o.ambientScale = lerp(s1.ambientScale, s2.ambientScale, t);
+    o.diffuseScale = lerp(s1.diffuseScale, s2.diffuseScale, t);
+    o.specularScale = lerp(s1.specularScale, s2.specularScale, t);
+    o.specularPow = lerp(s1.specularPow, s2.specularPow, t);
+    o.occlusionScale = lerp(s1.occlusionScale, s2.occlusionScale, t);
+    o.occlusionRange = lerp(s1.occlusionRange, s2.occlusionRange, t);
+    o.occlusionResolution = lerp(s1.occlusionResolution, s2.occlusionResolution, t);
+    o.occlusionColor = lerp(s1.occlusionColor, s2.occlusionColor, t);
+    o.signedDistance = signedDistance;
+    return o;
+}
+
+// A minus B: carves s2 out of s1 (smooth subtraction, smax(d1,-d2,k)). Near
+// the seam the carved cavity wall is literally s2's own surface with its
+// normal flipped inward, so we shade it by blending toward s2's shading
+// fields there, same as any other seam in this file.
+Surface SubtractSurface(Surface s1, Surface s2, float smoothness)
+{
+    float2 sd = PolySmaxSurface(s1.signedDistance, -s2.signedDistance, smoothness);
+    float signedDistance = sd.x;
+    float t = sd.y;
+
+    Surface o;
+    o.color = lerp(s1.color, s2.color, t);
+    o.ambientScale = lerp(s1.ambientScale, s2.ambientScale, t);
+    o.diffuseScale = lerp(s1.diffuseScale, s2.diffuseScale, t);
+    o.specularScale = lerp(s1.specularScale, s2.specularScale, t);
+    o.specularPow = lerp(s1.specularPow, s2.specularPow, t);
+    o.occlusionScale = lerp(s1.occlusionScale, s2.occlusionScale, t);
+    o.occlusionRange = lerp(s1.occlusionRange, s2.occlusionRange, t);
+    o.occlusionResolution = lerp(s1.occlusionResolution, s2.occlusionResolution, t);
+    o.occlusionColor = lerp(s1.occlusionColor, s2.occlusionColor, t);
+    o.signedDistance = signedDistance;
+    return o;
+}
+
+// XOR: (A minus B) union (B minus A) - the parts of each skeleton that
+// don't overlap the other, with the overlap itself hollowed out.
+Surface SymmetricDifferenceSurface(Surface s1, Surface s2, float smoothness)
+{
+    Surface aMinusB = SubtractSurface(s1, s2, smoothness);
+    Surface bMinusA = SubtractSurface(s2, s1, smoothness);
+    return UnionSurface(aMinusB, bMinusA, smoothness);
 }
 
 // -----------------------------------------------------------------
@@ -363,9 +434,9 @@ Surface SceneSDFSurface(float3 samplePoint)
         edgeHit[sk] = true;
     }
 
-    // --- combine joints+edges per skeleton, then the two skeletons together ---
-    Surface skelSurface = MakeEmptySurface();
-    bool skelHit = false;
+    // --- combine joints+edges per skeleton ---
+    Surface skelSurfaces[SKELETON_COUNT];
+    bool skelSurfaceValid[SKELETON_COUNT];
 
     [unroll]
     for (int sk3 = 0; sk3 < SKELETON_COUNT; sk3++)
@@ -389,18 +460,49 @@ Surface SceneSDFSurface(float3 samplePoint)
             combinedValid = true;
         }
 
-        if (combinedValid)
+        if (combinedValid && _RM_SkeletonInvert[sk3] != 0.0)
         {
-            if (skelHit)
-            {
-                skelSurface = UnionSurface(combined, skelSurface, 0.001);
-            }
-            else
-            {
-                skelSurface = combined;
-            }
-            skelHit = true;
+            combined.signedDistance = -combined.signedDistance;
         }
+
+        skelSurfaces[sk3] = combined;
+        skelSurfaceValid[sk3] = combinedValid;
+    }
+
+    // --- combine skeleton A (index 0) and skeleton B (index 1) via the
+    // selected boolean operator ---
+    Surface skelSurface = MakeEmptySurface();
+    bool skelHit = false;
+
+    if (skelSurfaceValid[0] && skelSurfaceValid[1])
+    {
+        if (_RM_SkeletonCombineOp == 1)
+        {
+            skelSurface = SubtractSurface(skelSurfaces[0], skelSurfaces[1], _RM_SkeletonCombineSmoothing);
+        }
+        else if (_RM_SkeletonCombineOp == 2)
+        {
+            skelSurface = IntersectSurface(skelSurfaces[0], skelSurfaces[1], _RM_SkeletonCombineSmoothing);
+        }
+        else if (_RM_SkeletonCombineOp == 3)
+        {
+            skelSurface = SymmetricDifferenceSurface(skelSurfaces[0], skelSurfaces[1], _RM_SkeletonCombineSmoothing);
+        }
+        else
+        {
+            skelSurface = UnionSurface(skelSurfaces[0], skelSurfaces[1], _RM_SkeletonCombineSmoothing);
+        }
+        skelHit = true;
+    }
+    else if (skelSurfaceValid[0])
+    {
+        skelSurface = skelSurfaces[0];
+        skelHit = true;
+    }
+    else if (skelSurfaceValid[1])
+    {
+        skelSurface = skelSurfaces[1];
+        skelHit = true;
     }
 
     // --- optional shared object primitives ---

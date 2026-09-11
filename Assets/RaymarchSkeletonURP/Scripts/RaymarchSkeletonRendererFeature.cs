@@ -60,6 +60,14 @@ namespace Premiere.RaymarchSkeleton
         [Tooltip("Blend radius between the combined skeletons and the optional shared object primitives (== /vis/skelobjectsmooth in the original).")]
         public float skelObjectSmoothing = 0.05f;
 
+        [Header("Skeleton A/B Combine")]
+        [Tooltip("Boolean operator combining Skeleton A and Skeleton B into one surface: Union (+), Subtract (A minus B, -), Intersect (∩), or Symmetric Difference/XOR (%).")]
+        public SkeletonCombineOp skeletonCombineOp = SkeletonCombineOp.Union;
+
+        [Range(0, 1f)]
+        [Tooltip("Blend radius for the Skeleton A/B combine operator above. At the default value, Union reproduces this system's original always-on hardcoded blend exactly.")]
+        public float skeletonCombineSmoothing = 0.001f;
+
         private RaymarchPass _pass;
 
         private static readonly int SceneTransformId = Shader.PropertyToID("_RM_SceneTransform");
@@ -72,6 +80,9 @@ namespace Premiere.RaymarchSkeleton
         private static readonly int FogMaxDistId = Shader.PropertyToID("_RM_FogMaxDist");
         private static readonly int JointEdgeSmoothingId = Shader.PropertyToID("_RM_JointEdgeSmoothing");
         private static readonly int SkelObjectSmoothingId = Shader.PropertyToID("_RM_SkelObjectSmoothing");
+        private static readonly int SkeletonCombineOpId = Shader.PropertyToID("_RM_SkeletonCombineOp");
+        private static readonly int SkeletonCombineSmoothingId = Shader.PropertyToID("_RM_SkeletonCombineSmoothing");
+        private static readonly int SkeletonInvertId = Shader.PropertyToID("_RM_SkeletonInvert");
 
         private static readonly int JointColorId = Shader.PropertyToID("_RM_JointColor");
         private static readonly int JointAmbientId = Shader.PropertyToID("_RM_JointAmbientScale");
@@ -172,6 +183,8 @@ namespace Premiere.RaymarchSkeleton
             raymarchMaterial.SetFloat(FogMaxDistId, fogMaxDist);
 
             raymarchMaterial.SetFloat(SkelObjectSmoothingId, skelObjectSmoothing);
+            raymarchMaterial.SetInt(SkeletonCombineOpId, (int)skeletonCombineOp);
+            raymarchMaterial.SetFloat(SkeletonCombineSmoothingId, skeletonCombineSmoothing);
 
             // --- per-skeleton look ---
             var skeletons = new[] { skeletonA, skeletonB };
@@ -197,6 +210,7 @@ namespace Premiere.RaymarchSkeleton
             var edgeOccColor = new Vector4[SkeletonCount];
 
             var jointEdgeSmoothing = new float[SkeletonCount];
+            var skeletonInvert = new float[SkeletonCount];
 
             for (int sk = 0; sk < SkeletonCount; sk++)
             {
@@ -227,6 +241,7 @@ namespace Premiere.RaymarchSkeleton
                 edgeOccColor[sk] = inst != null ? (Vector4)(Color)inst.edgeOcclusionColor : Vector4.zero;
 
                 jointEdgeSmoothing[sk] = inst != null ? inst.jointEdgeSmoothing : 0.05f;
+                skeletonInvert[sk] = (inst != null && inst.invert) ? 1f : 0f;
             }
 
             raymarchMaterial.SetVectorArray(JointColorId, jointColors);
@@ -250,6 +265,7 @@ namespace Premiere.RaymarchSkeleton
             raymarchMaterial.SetVectorArray(EdgeOcclusionColorId, edgeOccColor);
 
             raymarchMaterial.SetFloatArray(JointEdgeSmoothingId, jointEdgeSmoothing);
+            raymarchMaterial.SetFloatArray(SkeletonInvertId, skeletonInvert);
 
             // --- flatten joints/edges from both skeletons into fixed-size arrays ---
             for (int i = 0; i < MaxJoints; i++)
