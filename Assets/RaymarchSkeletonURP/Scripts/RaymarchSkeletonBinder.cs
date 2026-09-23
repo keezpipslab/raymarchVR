@@ -27,6 +27,10 @@ namespace Premiere.RaymarchSkeleton
         public RaymarchSkeletonInstance skeletonB;
         public Transform lightSource;
 
+        [Tooltip("Optional body-anchored composition overlays (CompositionExporter JSON), one per skeleton slot above.")]
+        public RaymarchCompositionInstance compositionA;
+        public RaymarchCompositionInstance compositionB;
+
         private void OnEnable() => Bind();
         private void OnValidate() => Bind();
 
@@ -36,6 +40,8 @@ namespace Premiere.RaymarchSkeleton
             feature.skeletonA = skeletonA;
             feature.skeletonB = skeletonB;
             feature.lightSource = lightSource;
+            feature.compositionA = compositionA;
+            feature.compositionB = compositionB;
         }
     }
 }
