@@ -1706,7 +1706,7 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::Premiere.RaymarchSkeleton.RaymarchCompositionInstance
   avatarAnimator: {fileID: 39850728}
-  compositionJson: {fileID: 4900000, guid: 9576c2092cd04fd79cb76bd8e7d305d6, type: 2}
+  compositionJson: {fileID: 4900000, guid: 9576c2092cd04fd79cb76bd8e7d305d6, type: 3}
   compositionFilePath:
   loadOnEnable: 1
   color: {r: 1, g: 0.55, b: 0.15, a: 1}
