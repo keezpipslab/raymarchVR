@@ -165,6 +165,10 @@ instead of requiring a matching skeleton representation in both projects:
   length. This mapping was chosen for internal consistency (not carried
   over from the original tool, which isn't in this repo) — adjust freely
   if it doesn't match the exporting project's visual intent.
+- To see *only* the composition primitives, untick a skeleton's
+  `showJoints`/`showEdges` (Inspector or F1 panel), or press **F3** to
+  toggle both skeletons' base at once. The feature just leaves those
+  slots inactive (-1); the composition still tracks the Animator directly.
 - `CompositionDemo.unity` demonstrates the whole path: a
   `RaymarchCompositionInstance` on a `CompositionA` GameObject, pointed
   at `FiguurA`'s Animator, loading `SampleComposition.json`.

@@ -325,7 +325,9 @@ namespace Premiere.RaymarchSkeleton
                 if (inst == null) continue;
 
                 int jointBase = sk * MaxJointsPerSkeleton;
-                int jointCount = Mathf.Min(inst.ActiveJointCount, MaxJointsPerSkeleton);
+                // Hidden joints/edges just leave their slots at the inactive
+                // (-1) primitive set above, so the shader skips them.
+                int jointCount = inst.showJoints ? Mathf.Min(inst.ActiveJointCount, MaxJointsPerSkeleton) : 0;
                 for (int jI = 0; jI < jointCount; jI++)
                 {
                     _jointTransforms[jointBase + jI] = inst.jointInverseTransforms[jI];
@@ -336,7 +338,7 @@ namespace Premiere.RaymarchSkeleton
                 }
 
                 int edgeBase = sk * MaxEdgesPerSkeleton;
-                int edgeCount = Mathf.Min(inst.ActiveEdgeCount, MaxEdgesPerSkeleton);
+                int edgeCount = inst.showEdges ? Mathf.Min(inst.ActiveEdgeCount, MaxEdgesPerSkeleton) : 0;
                 for (int eI = 0; eI < edgeCount; eI++)
                 {
                     _edgeTransforms[edgeBase + eI] = inst.edgeInverseTransforms[eI];

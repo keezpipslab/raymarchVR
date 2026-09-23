@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 namespace Premiere.RaymarchSkeleton
 {
@@ -20,10 +21,13 @@ namespace Premiere.RaymarchSkeleton
         public RaymarchSkeletonInstance skeletonB;
 
         [Tooltip("Key that shows/hides the panel.")]
-        public KeyCode toggleKey = KeyCode.F1;
+        public Key toggleKey = Key.F1;
 
         [Tooltip("Key that turns raymarching itself on/off, without needing the panel open.")]
-        public KeyCode raymarchToggleKey = KeyCode.F2;
+        public Key raymarchToggleKey = Key.F2;
+
+        [Tooltip("Key that shows/hides both skeletons' base joints+edges at once, leaving only the composition overlay primitives.")]
+        public Key skeletonBaseToggleKey = Key.F3;
 
         public bool visible = true;
 
@@ -33,9 +37,45 @@ namespace Premiere.RaymarchSkeleton
 
         private void Update()
         {
-            if (Input.GetKeyDown(toggleKey)) visible = !visible;
-            if (Input.GetKeyDown(raymarchToggleKey) && feature != null) feature.raymarchEnabled = !feature.raymarchEnabled;
+            var keyboard = Keyboard.current;
+            if (keyboard == null) return;
+
+            if (IsValidKey(toggleKey) && keyboard[toggleKey].wasPressedThisFrame) visible = !visible;
+            if (IsValidKey(raymarchToggleKey) && keyboard[raymarchToggleKey].wasPressedThisFrame && feature != null) feature.raymarchEnabled = !feature.raymarchEnabled;
+            if (IsValidKey(skeletonBaseToggleKey) && keyboard[skeletonBaseToggleKey].wasPressedThisFrame) ToggleSkeletonBases();
         }
+
+        /// <summary>Hides both skeletons' joints+edges if any are visible, otherwise shows them all again.</summary>
+        private void ToggleSkeletonBases()
+        {
+            bool anyVisible = IsBaseVisible(skeletonA) || IsBaseVisible(skeletonB);
+            SetBaseVisible(skeletonA, !anyVisible);
+            SetBaseVisible(skeletonB, !anyVisible);
+        }
+
+        private static bool IsBaseVisible(RaymarchSkeletonInstance inst) => inst != null && (inst.showJoints || inst.showEdges);
+
+        private static void SetBaseVisible(RaymarchSkeletonInstance inst, bool show)
+        {
+            if (inst == null) return;
+            inst.showJoints = show;
+            inst.showEdges = show;
+        }
+
+        private static bool IsValidKey(Key key) => key > Key.None && key <= Key.OEM5;
+
+        // Scenes saved while these fields were legacy KeyCodes still hold
+        // KeyCode numbers (e.g. F1 = 282), which aren't valid Input System
+        // Keys - fall back to the defaults instead of silently ignoring them.
+        // Key.None stays None, so a key can still be deliberately disabled.
+        private void OnValidate()
+        {
+            if (toggleKey != Key.None && !IsValidKey(toggleKey)) toggleKey = Key.F1;
+            if (raymarchToggleKey != Key.None && !IsValidKey(raymarchToggleKey)) raymarchToggleKey = Key.F2;
+            if (skeletonBaseToggleKey != Key.None && !IsValidKey(skeletonBaseToggleKey)) skeletonBaseToggleKey = Key.F3;
+        }
+
+        private void Awake() => OnValidate();
 
         private void OnGUI()
         {
@@ -106,6 +146,11 @@ namespace Premiere.RaymarchSkeleton
                 GUILayout.Label("Assign this skeleton slot on the RaymarchSkeletonUI component.");
                 return;
             }
+
+            GUILayout.Space(6);
+            GUILayout.Label($"Visibility (both skeletons: {skeletonBaseToggleKey})", GUI.skin.box);
+            inst.showJoints = GUILayout.Toggle(inst.showJoints, "Show joints");
+            inst.showEdges = GUILayout.Toggle(inst.showEdges, "Show edges (bones)");
 
             GUILayout.Space(6);
             GUILayout.Label("Joints", GUI.skin.box);

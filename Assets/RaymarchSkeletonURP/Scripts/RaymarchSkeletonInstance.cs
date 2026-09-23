@@ -42,6 +42,13 @@ namespace Premiere.RaymarchSkeleton
         [Tooltip("Applied on top of every joint's (corrected) rotation. Use this instead of hand-editing every jointRotCorrections entry when your whole capture rig's axes are offset from Unity's (the original tool hardcoded a blanket +90 deg around Y for this same reason - this is the equivalent knob).")]
         public Quaternion globalJointRotationOffset = Quaternion.identity;
 
+        [Header("Visibility")]
+        [Tooltip("Render this skeleton's joint primitives. Turn off (together with showEdges) to see only the composition overlay primitives anchored to this avatar.")]
+        public bool showJoints = true;
+
+        [Tooltip("Render this skeleton's edge (bone) primitives. Turn off (together with showJoints) to see only the composition overlay primitives anchored to this avatar.")]
+        public bool showEdges = true;
+
         [Header("Joint look")]
         public RaymarchPrimitive jointPrimitiveType = RaymarchPrimitive.Sphere;
         public Vector3 jointSize = new Vector3(0.08f, 0.08f, 0.08f);

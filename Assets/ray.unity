@@ -400,8 +400,8 @@ MonoBehaviour:
   feature: {fileID: -2093661157066132731, guid: f288ae1f4751b564a96ac7587541f7a2, type: 2}
   skeletonA: {fileID: 1821162946}
   skeletonB: {fileID: 634108695}
-  toggleKey: 265
-  raymarchToggleKey: 283
+  toggleKey: 94
+  raymarchToggleKey: 95
   visible: 1
 --- !u!4 &195557272
 Transform:
