@@ -26,7 +26,7 @@
 #define MAX_EDGES_PER_SKELETON 40
 #define MAX_JOINTS (MAX_JOINTS_PER_SKELETON * SKELETON_COUNT)
 #define MAX_EDGES (MAX_EDGES_PER_SKELETON * SKELETON_COUNT)
-#define MAX_OBJECTS 4
+#define MAX_OBJECTS 64
 
 #define RM_MIN_DIST 0.0
 #define RM_MAX_DIST 100.0
@@ -296,6 +296,123 @@ float RoundCapsuleSDF(float3 p, float h, float r, float radius)
 }
 
 // -----------------------------------------------------------------
+// Extra SDF primitives for RaymarchCompositionInstance ("composition"
+// elements exported by the companion project's CompositionExporter -
+// see RaymarchCompositionPrimitive.cs for the kind enum these match).
+// Local axis convention matches the rest of this file: XY is the radial
+// plane, Z is the long/height axis (RoundCylinderSDF/RoundCapsuleSDF
+// above already use p.xy radial / p.z height the same way), and shapes
+// are centered on the local origin. These are direct HLSL ports of
+// Inigo Quilez's well-known analytic SDF formulas (iquilezles.org/
+// articles/distfunctions), re-parameterised onto that Z-axis convention;
+// Cone/Pyramid use this file's own RoundBoxSDF-style inside/outside
+// half-space combination instead of iq's formulas, for consistency with
+// the rest of this file and to keep the derivation easy to verify.
+// -----------------------------------------------------------------
+float TorusSDF(float3 p, float majorRadius, float minorRadius)
+{
+    float2 q = float2(length(p.xy) - majorRadius, p.z);
+    return length(q) - minorRadius;
+}
+
+float OctahedronSDF(float3 p, float s)
+{
+    p = abs(p);
+    float m = p.x + p.y + p.z - s;
+    float3 q;
+    if (3.0 * p.x < m) q = p.xyz;
+    else if (3.0 * p.y < m) q = p.yzx;
+    else if (3.0 * p.z < m) q = p.zxy;
+    else return m * 0.57735027;
+
+    float k = clamp(0.5 * (q.z - q.y + s), 0.0, s);
+    return length(float3(q.x, q.y - s + k, q.z - k));
+}
+
+float HexPrismSDF(float3 p, float hexRadius, float fullDepth)
+{
+    float halfDepth = fullDepth * 0.5;
+    const float3 k = float3(-0.8660254, 0.5, 0.57735);
+    float2 qxy = abs(p.xy);
+    qxy -= 2.0 * min(dot(k.xy, qxy), 0.0) * k.xy;
+    float2 d = float2(
+        length(qxy - float2(clamp(qxy.x, -k.z * hexRadius, k.z * hexRadius), hexRadius)) * sign(qxy.y - hexRadius),
+        abs(p.z) - halfDepth);
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+
+float TriPrismSDF(float3 p, float triSize, float fullDepth)
+{
+    float halfDepth = fullDepth * 0.5;
+    float3 q = abs(p);
+    return max(q.z - halfDepth, max(q.x * 0.866025 + p.y * 0.5, -p.y) - triSize * 0.5);
+}
+
+// Solid cone: circular base of radius `r` at z=-h/2, apex at z=+h/2.
+// Built the same way RoundBoxSDF above combines an "inside" and
+// "outside" half-space distance, from the two bounding surfaces (the
+// slanted side, and the base cap).
+float ConeSDF(float3 p, float r, float fullHeight)
+{
+    float h = fullHeight;
+    float3 q = float3(p.x, p.y, p.z + h * 0.5); // base plane at z=0, apex at z=h
+    float radial = length(q.xy);
+    float denom = max(length(float2(h, r)), 1e-5);
+    float sideDist = (radial * h + q.z * r - r * h) / denom;
+    float baseDist = -q.z;
+
+    float insideDistance = min(max(sideDist, baseDist), 0.0);
+    float outsideDistance = length(float2(max(sideDist, 0.0), max(baseDist, 0.0)));
+    return insideDistance + outsideDistance;
+}
+
+// Solid square pyramid: base (full width `baseWidth`) at z=-h/2, apex tip
+// at z=+h/2. Same inside/outside construction as ConeSDF above, but with
+// a square (max(|x|,|y|)) cross-section instead of a circular one.
+float PyramidSDF(float3 p, float baseWidth, float fullHeight)
+{
+    float h = fullHeight;
+    float baseHalf = baseWidth * 0.5;
+    float3 q = float3(p.x, p.y, p.z + h * 0.5); // base plane at z=0, apex at z=h
+    float radial = max(abs(q.x), abs(q.y));
+    float denom = max(length(float2(h, baseHalf)), 1e-5);
+    float faceDist = (radial * h + q.z * baseHalf - baseHalf * h) / denom;
+    float baseDist = -q.z;
+
+    float insideDistance = min(max(faceDist, baseDist), 0.0);
+    float outsideDistance = length(float2(max(faceDist, 0.0), max(baseDist, 0.0)));
+    return insideDistance + outsideDistance;
+}
+
+// Chain-link shape (a stadium-stretched torus): stretched by `le` along Z,
+// ring tube of major radius `r1` / minor (cross-section) radius `r2`.
+float LinkSDF(float3 p, float le, float r1, float r2)
+{
+    float3 q = float3(p.x, max(abs(p.z) - le, 0.0), p.y);
+    return length(float2(length(q.xy) - r1, q.z)) - r2;
+}
+
+// Dispatches on RaymarchCompositionPrimitive (0-11, see
+// RaymarchCompositionPrimitive.cs) - unlike PrimitiveMorphSDF below, this
+// is an exact switch with no fractional morphing between kinds, since
+// composition elements always carry one exact kind from the export.
+float CompositionPrimitiveSDF(float3 p, float3 size, float rounding, int kind)
+{
+    if (kind == 0) return SphereSDF(p, size.x);
+    if (kind == 1) return RoundBoxSDF(p, size, 0.0);              // Box (sharp)
+    if (kind == 2) return RoundCapsuleSDF(p, size.z, size.x, 0.0); // Capsule
+    if (kind == 3) return PyramidSDF(p, size.x, size.z);
+    if (kind == 4) return TorusSDF(p, size.x, size.y);
+    if (kind == 5) return RoundBoxSDF(p, size, rounding);          // RoundBox
+    if (kind == 6) return ConeSDF(p, size.x, size.z);
+    if (kind == 7) return OctahedronSDF(p, size.x);
+    if (kind == 8) return HexPrismSDF(p, size.x, size.z);
+    if (kind == 9) return RoundCylinderSDF(p, size.z, size.x, 0.0); // Cylinder
+    if (kind == 10) return TriPrismSDF(p, size.x, size.z);
+    return LinkSDF(p, size.z * 0.5, size.x, size.y);               // 11 = Link
+}
+
+// -----------------------------------------------------------------
 // Primitive morphing (== primitiveMorphSDF). `primitive` can carry a
 // fractional part to smoothly morph between primitive N and N+1, exactly
 // like the original (e.g. 0.5 == halfway between sphere and box).
@@ -516,7 +633,7 @@ Surface SceneSDFSurface(float3 samplePoint)
         if (!(prim >= 0.0)) continue; // NaN-safe, see joint loop above
 
         float3 localPos = mul(_RM_ObjectTransforms[oI], samplePoint4D).xyz;
-        float d = PrimitiveMorphSDF(localPos, _RM_ObjectSizes[oI], _RM_ObjectRoundings[oI], prim);
+        float d = CompositionPrimitiveSDF(localPos, _RM_ObjectSizes[oI], _RM_ObjectRoundings[oI], (int)prim);
 
         Surface tmp;
         tmp.color = _RM_ObjectColors[oI];

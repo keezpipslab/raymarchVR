@@ -1,0 +1,82 @@
+{
+  "exportedAtUtc": "2026-09-23T14:02:11.0000000Z",
+  "elements": [
+    {
+      "kind": "Sphere",
+      "size": { "x": 0.09, "y": 0.09, "z": 0.09 },
+      "anchor": "Joint_LeftHand",
+      "localPosition": { "x": 0.0, "y": 0.0, "z": 0.06 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Box",
+      "size": { "x": 0.1, "y": 0.1, "z": 0.1 },
+      "anchor": "Joint_RightHand",
+      "localPosition": { "x": 0.0, "y": 0.0, "z": 0.07 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "RoundBox",
+      "size": { "x": 0.09, "y": 0.09, "z": 0.22 },
+      "anchor": "Bone_RightUpperArm_RightLowerArm",
+      "localPosition": { "x": 0.0, "y": 0.06, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Capsule",
+      "size": { "x": 0.05, "y": 0.05, "z": 0.3 },
+      "anchor": "Bone_LeftUpperArm_LeftLowerArm",
+      "localPosition": { "x": 0.06, "y": 0.0, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Torus",
+      "size": { "x": 0.11, "y": 0.025, "z": 0.0 },
+      "anchor": "Joint_LeftFoot",
+      "localPosition": { "x": 0.0, "y": 0.08, "z": 0.0 },
+      "localRotation": { "x": 0.7071068, "y": 0.0, "z": 0.0, "w": 0.7071068 }
+    },
+    {
+      "kind": "Cone",
+      "size": { "x": 0.08, "y": 0.0, "z": 0.16 },
+      "anchor": "Joint_RightFoot",
+      "localPosition": { "x": 0.0, "y": 0.0, "z": 0.1 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Octahedron",
+      "size": { "x": 0.1, "y": 0.0, "z": 0.0 },
+      "anchor": "Joint_LeftUpperLeg",
+      "localPosition": { "x": 0.0, "y": -0.12, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "HexagonalPrism",
+      "size": { "x": 0.09, "y": 0.0, "z": 0.12 },
+      "anchor": "Joint_RightUpperLeg",
+      "localPosition": { "x": 0.0, "y": -0.12, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "TriangularPrism",
+      "size": { "x": 0.12, "y": 0.0, "z": 0.14 },
+      "anchor": "Joint_LeftLowerLeg",
+      "localPosition": { "x": 0.0, "y": 0.05, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Pyramid",
+      "size": { "x": 0.16, "y": 0.0, "z": 0.2 },
+      "anchor": "Joint_RightLowerLeg",
+      "localPosition": { "x": 0.0, "y": 0.0, "z": 0.12 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    },
+    {
+      "kind": "Link",
+      "size": { "x": 0.06, "y": 0.02, "z": 0.1 },
+      "anchor": "Joint_LeftLowerArm",
+      "localPosition": { "x": 0.0, "y": 0.09, "z": 0.0 },
+      "localRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 }
+    }
+  ]
+}

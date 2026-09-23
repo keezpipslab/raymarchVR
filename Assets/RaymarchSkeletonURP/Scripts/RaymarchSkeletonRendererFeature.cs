@@ -22,7 +22,7 @@ namespace Premiere.RaymarchSkeleton
         private const int SkeletonCount = 2;
         private const int MaxJoints = MaxJointsPerSkeleton * SkeletonCount;
         private const int MaxEdges = MaxEdgesPerSkeleton * SkeletonCount;
-        private const int MaxObjects = 4;
+        private const int MaxObjects = 64;
 
         [Header("Material")]
         public Material raymarchMaterial;
@@ -41,6 +41,11 @@ namespace Premiere.RaymarchSkeleton
         [Header("Skeletons (exactly two)")]
         public RaymarchSkeletonInstance skeletonA;
         public RaymarchSkeletonInstance skeletonB;
+
+        [Header("Composition overlays (optional, one per skeleton)")]
+        [Tooltip("Body-anchored primitives loaded from a CompositionExporter JSON export (see RaymarchCompositionInstance). Flattened together with compositionB into the shared object arrays below, capped at MaxObjects total.")]
+        public RaymarchCompositionInstance compositionA;
+        public RaymarchCompositionInstance compositionB;
 
         [Header("Light")]
         public Transform lightSource;
@@ -118,6 +123,19 @@ namespace Premiere.RaymarchSkeleton
         private static readonly int EdgeSmoothingsId = Shader.PropertyToID("_RM_EdgeSmoothings");
 
         private static readonly int ObjectPrimitivesId = Shader.PropertyToID("_RM_ObjectPrimitives");
+        private static readonly int ObjectTransformsId = Shader.PropertyToID("_RM_ObjectTransforms");
+        private static readonly int ObjectSizesId = Shader.PropertyToID("_RM_ObjectSizes");
+        private static readonly int ObjectRoundingsId = Shader.PropertyToID("_RM_ObjectRoundings");
+        private static readonly int ObjectSmoothingsId = Shader.PropertyToID("_RM_ObjectSmoothings");
+        private static readonly int ObjectColorsId = Shader.PropertyToID("_RM_ObjectColors");
+        private static readonly int ObjectAmbientId = Shader.PropertyToID("_RM_ObjectAmbientScales");
+        private static readonly int ObjectDiffuseId = Shader.PropertyToID("_RM_ObjectDiffuseScales");
+        private static readonly int ObjectSpecularId = Shader.PropertyToID("_RM_ObjectSpecularScales");
+        private static readonly int ObjectSpecularPowId = Shader.PropertyToID("_RM_ObjectSpecularPows");
+        private static readonly int ObjectOcclusionScaleId = Shader.PropertyToID("_RM_ObjectOcclusionScales");
+        private static readonly int ObjectOcclusionRangeId = Shader.PropertyToID("_RM_ObjectOcclusionRanges");
+        private static readonly int ObjectOcclusionResolutionId = Shader.PropertyToID("_RM_ObjectOcclusionResolutions");
+        private static readonly int ObjectOcclusionColorId = Shader.PropertyToID("_RM_ObjectOcclusionColors");
 
         private static readonly int MaxStepsId = Shader.PropertyToID("_RM_MaxSteps");
         private static readonly int MonoSourceId = Shader.PropertyToID("_RM_MonoSource");
@@ -137,6 +155,19 @@ namespace Premiere.RaymarchSkeleton
         private readonly float[] _edgeSmoothings = new float[MaxEdges];
 
         private readonly float[] _objectPrimitives = new float[MaxObjects];
+        private readonly Matrix4x4[] _objectTransforms = new Matrix4x4[MaxObjects];
+        private readonly Vector4[] _objectSizes = new Vector4[MaxObjects];
+        private readonly float[] _objectRoundings = new float[MaxObjects];
+        private readonly float[] _objectSmoothings = new float[MaxObjects];
+        private readonly Vector4[] _objectColors = new Vector4[MaxObjects];
+        private readonly float[] _objectAmbient = new float[MaxObjects];
+        private readonly float[] _objectDiffuse = new float[MaxObjects];
+        private readonly float[] _objectSpecular = new float[MaxObjects];
+        private readonly float[] _objectSpecularPow = new float[MaxObjects];
+        private readonly float[] _objectOcclusionScale = new float[MaxObjects];
+        private readonly float[] _objectOcclusionRange = new float[MaxObjects];
+        private readonly float[] _objectOcclusionResolution = new float[MaxObjects];
+        private readonly Vector4[] _objectOcclusionColor = new Vector4[MaxObjects];
 
         public override void Create()
         {
@@ -165,6 +196,8 @@ namespace Premiere.RaymarchSkeleton
         {
             skeletonA?.Gather();
             skeletonB?.Gather();
+            compositionA?.Gather();
+            compositionB?.Gather();
 
             // --- scalar / global settings ---
             raymarchMaterial.SetInt(MaxStepsId, maxSteps);
@@ -292,7 +325,9 @@ namespace Premiere.RaymarchSkeleton
                 if (inst == null) continue;
 
                 int jointBase = sk * MaxJointsPerSkeleton;
-                int jointCount = Mathf.Min(inst.ActiveJointCount, MaxJointsPerSkeleton);
+                // Hidden joints/edges just leave their slots at the inactive
+                // (-1) primitive set above, so the shader skips them.
+                int jointCount = inst.showJoints ? Mathf.Min(inst.ActiveJointCount, MaxJointsPerSkeleton) : 0;
                 for (int jI = 0; jI < jointCount; jI++)
                 {
                     _jointTransforms[jointBase + jI] = inst.jointInverseTransforms[jI];
@@ -303,7 +338,7 @@ namespace Premiere.RaymarchSkeleton
                 }
 
                 int edgeBase = sk * MaxEdgesPerSkeleton;
-                int edgeCount = Mathf.Min(inst.ActiveEdgeCount, MaxEdgesPerSkeleton);
+                int edgeCount = inst.showEdges ? Mathf.Min(inst.ActiveEdgeCount, MaxEdgesPerSkeleton) : 0;
                 for (int eI = 0; eI < edgeCount; eI++)
                 {
                     _edgeTransforms[edgeBase + eI] = inst.edgeInverseTransforms[eI];
@@ -328,9 +363,71 @@ namespace Premiere.RaymarchSkeleton
             raymarchMaterial.SetFloatArray(EdgeRoundingsId, _edgeRoundings);
             raymarchMaterial.SetFloatArray(EdgeSmoothingsId, _edgeSmoothings);
 
-            // No props wired up by default - leave the (optional) object slots inactive.
-            for (int i = 0; i < MaxObjects; i++) _objectPrimitives[i] = -1f;
+            // --- flatten composition overlay elements into the shared object arrays ---
+            for (int i = 0; i < MaxObjects; i++)
+            {
+                _objectTransforms[i] = Matrix4x4.identity;
+                _objectPrimitives[i] = -1f;
+                _objectSizes[i] = Vector4.zero;
+                _objectRoundings[i] = 0f;
+                _objectSmoothings[i] = 0.01f;
+                _objectColors[i] = Vector4.zero;
+                _objectAmbient[i] = 0f;
+                _objectDiffuse[i] = 0f;
+                _objectSpecular[i] = 0f;
+                _objectSpecularPow[i] = 10f;
+                _objectOcclusionScale[i] = 0f;
+                _objectOcclusionRange[i] = 0.5f;
+                _objectOcclusionResolution[i] = 0.08f;
+                _objectOcclusionColor[i] = Vector4.zero;
+            }
+
+            int objI = 0;
+            var overlays = new[] { compositionA, compositionB };
+            foreach (var comp in overlays)
+            {
+                if (comp == null) continue;
+
+                int n = Mathf.Min(comp.ActiveElementCount, MaxObjects - objI);
+                Vector4 compColor = comp.color;
+                Vector4 compOccColor = (Vector4)(Color)comp.occlusionColor;
+
+                for (int e = 0; e < n; e++)
+                {
+                    _objectTransforms[objI] = comp.elementInverseTransforms[e];
+                    _objectPrimitives[objI] = comp.elementPrimitives[e];
+                    _objectSizes[objI] = comp.elementSizes[e];
+                    _objectRoundings[objI] = comp.elementRoundings[e];
+                    _objectSmoothings[objI] = comp.smoothing;
+                    _objectColors[objI] = compColor;
+                    _objectAmbient[objI] = comp.ambientScale;
+                    _objectDiffuse[objI] = comp.diffuseScale;
+                    _objectSpecular[objI] = comp.specularScale;
+                    _objectSpecularPow[objI] = comp.specularPow;
+                    _objectOcclusionScale[objI] = comp.occlusionScale;
+                    _objectOcclusionRange[objI] = comp.occlusionRange;
+                    _objectOcclusionResolution[objI] = comp.occlusionResolution;
+                    _objectOcclusionColor[objI] = compOccColor;
+                    objI++;
+                }
+
+                if (objI >= MaxObjects) break;
+            }
+
+            raymarchMaterial.SetMatrixArray(ObjectTransformsId, _objectTransforms);
             raymarchMaterial.SetFloatArray(ObjectPrimitivesId, _objectPrimitives);
+            raymarchMaterial.SetVectorArray(ObjectSizesId, _objectSizes);
+            raymarchMaterial.SetFloatArray(ObjectRoundingsId, _objectRoundings);
+            raymarchMaterial.SetFloatArray(ObjectSmoothingsId, _objectSmoothings);
+            raymarchMaterial.SetVectorArray(ObjectColorsId, _objectColors);
+            raymarchMaterial.SetFloatArray(ObjectAmbientId, _objectAmbient);
+            raymarchMaterial.SetFloatArray(ObjectDiffuseId, _objectDiffuse);
+            raymarchMaterial.SetFloatArray(ObjectSpecularId, _objectSpecular);
+            raymarchMaterial.SetFloatArray(ObjectSpecularPowId, _objectSpecularPow);
+            raymarchMaterial.SetFloatArray(ObjectOcclusionScaleId, _objectOcclusionScale);
+            raymarchMaterial.SetFloatArray(ObjectOcclusionRangeId, _objectOcclusionRange);
+            raymarchMaterial.SetFloatArray(ObjectOcclusionResolutionId, _objectOcclusionResolution);
+            raymarchMaterial.SetVectorArray(ObjectOcclusionColorId, _objectOcclusionColor);
 
             // Camera ray reconstruction happens in-shader via Unity's built-in
             // UNITY_MATRIX_I_VP / _WorldSpaceCameraPos rather than a manually

@@ -6,10 +6,9 @@ skinned meshes. It's a Unity URP port of a Python/OpenGL tool
 (`PREMIERE / AI-Toolbox / MotionVisualisation / RayMarching`) used for
 abstract motion visualisation research.
 
-If you're picking this up in a fresh session: read this file first, then
-`Assets/RaymarchSkeleton/README.md` for the deep technical mapping back
-to the original Python/GLSL source (what was ported 1:1, what was
-simplified, what's still missing).
+If you're picking this up in a fresh session: read this file first — it's
+the sole source of truth for this project (no README.md exists despite
+older notes referencing one).
 
 ## What's actually happening, at a glance
 
@@ -31,21 +30,34 @@ simplified, what's still missing).
 6. `RaymarchSkeletonUI` is a runtime IMGUI panel (toggle: **F1**) to
    live-tune every look/lighting parameter per skeleton, for finding
    good settings while scrubbing the Timeline.
+7. Optionally, `RaymarchCompositionInstance` (one per avatar, same
+   pattern as `RaymarchAvatarSource`) overlays extra body-anchored SDF
+   primitives — sphere/box/capsule/pyramid/torus/roundbox/cone/
+   octahedron/hexagonal prism/cylinder/triangular prism/link — exported
+   from a companion (non-Unity) project's `CompositionExporter` as JSON,
+   re-anchored every frame to this avatar's live Humanoid pose. See
+   "Composition overlays" below.
 
-## File map (`Assets/RaymarchSkeleton/`)
+## File map (`Assets/RaymarchSkeletonURP/`)
 
 ```
 Shaders/
   RaymarchSkeletonCore.hlsl        - SDF primitives, blending, march loop, shading (the actual "raymarching")
   RaymarchSkeleton.shader          - full-screen URP pass wrapping the .hlsl, reconstructs camera ray
 Scripts/
-  RaymarchPrimitive.cs             - enum: Sphere/Box/Capsule/Cylinder (matches HLSL primitive index 0-3)
+  RaymarchPrimitive.cs             - enum: Sphere/Box/Capsule/Cylinder (matches HLSL primitive index 0-3, joints/edges only)
   SkeletonTopology.cs              - ScriptableObject: joint list + parent->child connectivity (+ optional per-joint rotation corrections), parses original *_joint_settings.json shape
   RaymarchSkeletonInstance.cs      - one skeleton's per-frame joint/edge transform + look data (feed jointWorldPositions/Rotations)
   RaymarchAvatarSource.cs          - drives a RaymarchSkeletonInstance from a Humanoid Animator's bones; ships a built-in 21-joint default topology
-  RaymarchSkeletonRendererFeature.cs - URP renderer feature; gathers both skeletons/frame, uploads shader arrays, issues the full-screen draw
+  RaymarchSkeletonRendererFeature.cs - URP renderer feature; gathers both skeletons + composition overlays/frame, uploads shader arrays, issues the full-screen draw
   RaymarchSkeletonUI.cs            - runtime (F1) IMGUI control panel bound to the feature + both instances
-README.md                          - full technical mapping back to the original Python/GLSL tool
+  RaymarchSkeletonBinder.cs        - pushes scene references (skeletons, composition overlays, light) onto the feature asset
+  RaymarchCompositionPrimitive.cs  - enum: the 12 composition-overlay SDF kinds (matches HLSL primitive index 0-11, objects only)
+  RaymarchCompositionData.cs       - JsonUtility DTOs for CompositionExporter's JSON export shape
+  RaymarchCompositionInstance.cs   - resolves a composition JSON's elements against a Humanoid Animator's live pose every frame
+Scenes/
+  CompositionDemo.unity            - ray.unity + one RaymarchCompositionInstance wired to FiguurA, loading SampleComposition.json
+SampleComposition.json             - example CompositionExporter export, used by CompositionDemo.unity
 ```
 
 ## Scene setup (already done if you're reading this from within the
@@ -65,10 +77,11 @@ project, but here's the reference if something needs re-wiring)
    feature's **Skeleton A / Skeleton B** slots in the Inspector fails
    with "Type Mismatch". Instead, add a `RaymarchSkeletonBinder`
    component (any GameObject in the scene) and assign its **Feature**,
-   **Skeleton A**, **Skeleton B**, and **Light Source** fields there —
-   all scene-to-scene / scene-to-asset references, so normal drag-and-
-   drop works. It pushes those references onto the feature in code
-   (`OnEnable`/`OnValidate`) once the scene loads.
+   **Skeleton A**, **Skeleton B**, **Light Source**, and (optionally)
+   **Composition A** / **Composition B** fields there — all scene-to-
+   scene / scene-to-asset references, so normal drag-and-drop works. It
+   pushes those references onto the feature in code (`OnEnable`/
+   `OnValidate`) once the scene loads.
 4. Light Source is optional on the binder — leave it unassigned and the
    feature falls back to a position above the camera.
 5. `RaymarchSkeletonUI` sits on any GameObject, with `feature`,
@@ -94,28 +107,84 @@ project, but here's the reference if something needs re-wiring)
   the Inspector or via the F1 panel so they're visually distinguishable
   where they overlap/blend.
 - **Array sizes are fixed at compile time**: `MAX_JOINTS_PER_SKELETON = 40`,
-  `MAX_EDGES_PER_SKELETON = 40`, `SKELETON_COUNT = 2`, `MAX_OBJECTS = 4`
+  `MAX_EDGES_PER_SKELETON = 40`, `SKELETON_COUNT = 2`, `MAX_OBJECTS = 64`
   (top of `RaymarchSkeletonCore.hlsl`, mirrored as consts in
   `RaymarchSkeletonRendererFeature.cs`). The built-in humanoid topology
-  uses 21 joints / 20 edges, well under the cap. If you change these
-  constants, change them **in both files** and in any place that
-  allocates matching arrays.
+  uses 21 joints / 20 edges, well under the cap; `MAX_OBJECTS` is the
+  shared cap across *both* composition overlays' elements combined
+  (`compositionA` + `compositionB`, first-come-first-served if you
+  exceed it). If you change these constants, change them **in both
+  files** and in any place that allocates matching arrays.
 - **This only supports exactly two skeletons** by design (array layout,
   UI, feature fields are all hardcoded to A/B). Supporting N skeletons
   would mean switching the flat arrays to a StructuredBuffer instead of
   fixed-size shader arrays — a bigger change, not a config tweak.
 - Adding a third+ avatar today = it just won't render (no slot for it).
 
+## Composition overlays (body-anchored primitives from an external export)
+
+A companion (non-Unity) project's `CompositionExporter` can export a JSON
+file of primitives rigged to a performer's body — one file, top level
+`{ "exportedAtUtc": ..., "elements": [...] }`, each element
+`{ "kind", "size", "anchor", "localPosition", "localRotation" }`. This
+project reconstructs those against its own Humanoid rig at runtime,
+instead of requiring a matching skeleton representation in both projects:
+
+- `anchor` is either `Joint_{BoneName}` (`BoneName` is a `HumanBodyBones`
+  member name directly, e.g. `Joint_LeftLowerArm`) or
+  `Bone_{From}_{To}` (a limb segment, anchored at the midpoint between
+  two bones, oriented the same way `RaymarchSkeletonInstance` orients
+  edges — parent→child `LookRotation` with world-up).
+- `RaymarchCompositionInstance.TryResolveAnchor()` does this resolution
+  every frame from `avatarAnimator.GetBoneTransform(...)`, so it tracks
+  Timeline/mocap playback exactly like `RaymarchAvatarSource` does for
+  joints/edges. `worldPos = anchorWorldPos + anchorWorldRot *
+  localPosition`, `worldRot = anchorWorldRot * localRotation`, matching
+  the exporting project's own reconstruction formula.
+- `kind` is parsed via `Enum.TryParse<RaymarchCompositionPrimitive>`, so
+  its 12 names must keep matching `CompositionExporter`'s `PrimitiveKind`
+  enum exactly. These are dispatched in `CompositionPrimitiveSDF()`
+  (`RaymarchSkeletonCore.hlsl`) — a plain switch, not the joint/edge
+  path's fractional-morph `PrimitiveMorphSDF()`.
+- The exported JSON carries no rounding value, so `RoundBox` elements all
+  share one `RaymarchCompositionInstance.roundBoxRounding` value; `Box`
+  elements are always sharp.
+- Composition elements piggyback on the shader's existing (previously
+  unused) shared "object" arrays — `RaymarchSkeletonRendererFeature`
+  gathers `compositionA`/`compositionB` and flattens their elements into
+  those arrays every frame, alongside both skeletons' joints/edges.
+- Primitive parameter mapping (all local space, Z is the long/height axis
+  — matching `RoundCylinderSDF`/`RoundCapsuleSDF`'s existing XY-radial/Z
+  convention, *not* the original GLSL tool's Y-axis convention): Sphere
+  `size.x`=radius; Box/RoundBox `size.xyz`=full extents; Capsule/Cylinder
+  `size.x`=radius, `size.z`=full length; Torus `size.x`=major radius,
+  `size.y`=tube radius; Octahedron `size.x`=scale; HexagonalPrism/
+  TriangularPrism `size.x`=radius/size, `size.z`=full depth;
+  Cone/Pyramid `size.x`=base radius/width, `size.z`=full height; Link
+  `size.x`=ring radius, `size.y`=tube radius, `size.z`=full stretch
+  length. This mapping was chosen for internal consistency (not carried
+  over from the original tool, which isn't in this repo) — adjust freely
+  if it doesn't match the exporting project's visual intent.
+- To see *only* the composition primitives, untick a skeleton's
+  `showJoints`/`showEdges` (Inspector or F1 panel), or press **F3** to
+  toggle both skeletons' base at once. The feature just leaves those
+  slots inactive (-1); the composition still tracks the Animator directly.
+- `CompositionDemo.unity` demonstrates the whole path: a
+  `RaymarchCompositionInstance` on a `CompositionA` GameObject, pointed
+  at `FiguurA`'s Animator, loading `SampleComposition.json`.
+
 ## Known gaps vs. the original tool (see README.md for detail)
 
 - No OSC control layer (the original was driven live via Max/MSP OSC
   messages — see the original README's `/vis/...` protocol). All
   control here is either Inspector fields or the F1 runtime UI.
-- No ripple deformation on the optional "object" primitives
+- No ripple deformation on the composition/"object" primitives
   (`objectamplitude`/`frequency`/`phase` in the original).
-- No fractal object primitives (apollonian, mandelbulb, menger sponge,
-  julia, kaliBox, truchet tower, "snake", …) — only sphere/box/capsule/
-  cylinder, for joints, edges, and objects alike.
+- No fractal primitives (apollonian, mandelbulb, menger sponge, julia,
+  kaliBox, truchet tower, "snake", …) anywhere — joints/edges are still
+  limited to sphere/box/capsule/cylinder (`RaymarchPrimitive`); the
+  composition/"object" path supports a wider set (see above) but still
+  not the fractals.
 - No `rayrotation`/`raywiggle` full-scene ray-distortion effects.
 
 ## Testing changes

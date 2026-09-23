@@ -434,6 +434,8 @@ MonoBehaviour:
   skeletonA: {fileID: 1821162946}
   skeletonB: {fileID: 634108695}
   lightSource: {fileID: 410087041}
+  compositionA: {fileID: 990000003}
+  compositionB: {fileID: 0}
 --- !u!1001 &305105583
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -1659,6 +1661,65 @@ Transform:
   - {fileID: 348844969}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &990000001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 990000002}
+  - component: {fileID: 990000003}
+  m_Layer: 0
+  m_Name: CompositionA
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &990000002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 990000001}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &990000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 990000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aa73351fe48b4c2f8e358e2887765d97, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Premiere.RaymarchSkeleton.RaymarchCompositionInstance
+  avatarAnimator: {fileID: 39850728}
+  compositionJson: {fileID: 4900000, guid: 9576c2092cd04fd79cb76bd8e7d305d6, type: 3}
+  compositionFilePath:
+  loadOnEnable: 1
+  color: {r: 1, g: 0.55, b: 0.15, a: 1}
+  ambientScale: 0.35
+  diffuseScale: 1
+  specularScale: 1
+  specularPow: 24
+  occlusionScale: 0.6
+  occlusionRange: 0.5
+  occlusionResolution: 0.08
+  occlusionColor: {r: 0, g: 0, b: 0, a: 1}
+  roundBoxRounding: 0.08
+  smoothing: 0.03
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1674,4 +1735,5 @@ SceneRoots:
   - {fileID: 195557272}
   - {fileID: 1533066324}
   - {fileID: 2026799742}
+  - {fileID: 990000002}
   - {fileID: 433072886}
